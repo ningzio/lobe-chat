@@ -16,6 +16,8 @@ import {
   ProviderSorts,
 } from '@/types/discover';
 
+import { agentRouter } from './agent';
+
 const log = debug('lambda-router:market');
 
 const marketSourceSchema = z.enum(['legacy', 'new']);
@@ -36,6 +38,9 @@ const marketProcedure = publicProcedure
   });
 
 export const marketRouter = router({
+  // ============================== Agent Management (authenticated) ==============================
+  agent: agentRouter,
+
   // ============================== Assistant Market ==============================
   getAssistantCategories: marketProcedure
     .input(
