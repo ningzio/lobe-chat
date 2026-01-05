@@ -25,6 +25,7 @@ import { type EnabledProviderWithModels } from '@/types/aiProvider';
 
 const STORAGE_KEY = 'MODEL_SWITCH_PANEL_WIDTH';
 const STORAGE_KEY_MODE = 'MODEL_SWITCH_PANEL_MODE';
+const STORAGE_KEY_PROVIDER_PREFERENCES = 'MODEL_SWITCH_PANEL_PROVIDER_PREFERENCES';
 const DEFAULT_WIDTH = 430;
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 600;
@@ -154,6 +155,11 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
       font-size: 12px;
       color: ${cssVar.colorTextSecondary};
     }
+
+    /* Override gap for provider items in submenu */
+    .ant-dropdown-menu-item > div > div > div {
+      gap: 12px !important;
+    }
   `,
   tag: css`
     cursor: pointer;
@@ -184,6 +190,29 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 }));
 
 const menuKey = (provider: string, model: string) => `${provider}-${model}`;
+
+// Helper functions for provider preferences
+const getProviderPreferences = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_PROVIDER_PREFERENCES);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+const setProviderPreference = (modelId: string, providerId: string) => {
+  if (typeof window === 'undefined') return;
+  const preferences = getProviderPreferences();
+  preferences[modelId] = providerId;
+  localStorage.setItem(STORAGE_KEY_PROVIDER_PREFERENCES, JSON.stringify(preferences));
+};
+
+const getPreferredProvider = (modelId: string): string | undefined => {
+  const preferences = getProviderPreferences();
+  return preferences[modelId];
+};
 
 interface ModelWithProviders {
   displayName: string;
@@ -499,6 +528,11 @@ const ModelSwitchPanel = memo<ModelSwitchPanelProps>(
             // Use active provider if found, otherwise use first provider for settings link
             const settingsProvider = activeProvider || data.providers[0];
 
+            // Get preferred provider from local storage
+            const preferredProviderId = getPreferredProvider(data.model.id);
+            // Determine which provider should be checked: prefer stored preference, fallback to active provider
+            const checkedProviderId = preferredProviderId || activeProvider?.id;
+
             // Single provider - direct click without submenu
             if (hasSingleProvider) {
               const singleProvider = data.providers[0];
@@ -565,7 +599,7 @@ const ModelSwitchPanel = memo<ModelSwitchPanelProps>(
                       type: 'group',
                     },
                     ...data.providers.map((p) => {
-                      const isCurrentProvider = menuKey(p.id, data.model.id) === activeKey;
+                      const isCheckedProvider = p.id === checkedProviderId;
                       return {
                         key: menuKey(p.id, data.model.id),
                         label: (
@@ -576,41 +610,41 @@ const ModelSwitchPanel = memo<ModelSwitchPanelProps>(
                             justify={'space-between'}
                             style={{ minWidth: 0 }}
                           >
-                            <Flexbox align={'center'} gap={8} horizontal style={{ minWidth: 0 }}>
-                              <div style={{ flexShrink: 0, width: 16 }}>
-                                {isCurrentProvider && (
-                                  <Icon
-                                    icon={LucideCheck}
-                                    size={16}
-                                    style={{ color: cssVar.colorPrimary }}
-                                  />
-                                )}
-                              </div>
-                              <ProviderItemRender
-                                logo={p.logo}
-                                name={p.name}
-                                provider={p.id}
-                                source={p.source}
+                            <ProviderItemRender
+                              logo={p.logo}
+                              name={p.name}
+                              provider={p.id}
+                              source={p.source}
+                            />
+                            <Flexbox align={'center'} gap={8} horizontal style={{ flexShrink: 0 }}>
+                              {isCheckedProvider && (
+                                <Icon
+                                  icon={LucideCheck}
+                                  size={16}
+                                  style={{ color: cssVar.colorPrimary }}
+                                />
+                              )}
+                              <ActionIcon
+                                icon={LucideBolt}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const url = urlJoin('/settings/provider', p.id || 'all');
+                                  if (e.ctrlKey || e.metaKey) {
+                                    window.open(url, '_blank');
+                                  } else {
+                                    navigate(url);
+                                  }
+                                }}
+                                size={'small'}
+                                title={t('ModelSwitchPanel.goToSettings')}
                               />
                             </Flexbox>
-                            <ActionIcon
-                              icon={LucideBolt}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const url = urlJoin('/settings/provider', p.id || 'all');
-                                if (e.ctrlKey || e.metaKey) {
-                                  window.open(url, '_blank');
-                                } else {
-                                  navigate(url);
-                                }
-                              }}
-                              size={'small'}
-                              title={t('ModelSwitchPanel.goToSettings')}
-                            />
                           </Flexbox>
                         ),
                         onClick: async () => {
+                          // Save provider preference
+                          setProviderPreference(data.model.id, p.id);
                           await handleModelChange(data.model.id, p.id);
                           handleOpenChange(false);
                         },
